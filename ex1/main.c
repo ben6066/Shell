@@ -15,6 +15,7 @@ typedef struct commandInfo {
 
 commandInfo commandsInfo[100];
 char oldPath[100];
+int execStatus;
 
 void commandInfoInit(commandInfo* command, char* userInput){
     // Initialize argv with NULLs
@@ -56,9 +57,18 @@ void commandInfoInit(commandInfo* command, char* userInput){
     p1 = command->command;
     p2 = p1 + strlen(command->command) + 1;
 
+    // Case echo command inserted with a string containing " -> skip the opening "
+    if(strcmp(p1, "echo") == 0 && *p2 == '"')
+        p2++;
+
     int argvIndex = 0;
 
     while(*p1 != '\0'){
+        // Case echo command inserted with a string containing " -> erase it from the end
+        if(strcmp(command->command, "echo") == 0 && p1[strlen(p1) - 1] == '"'){
+            p1[strlen(p1) - 1] = '\0';
+        }
+
         command->argv[argvIndex] = p1;
         argvIndex++;
         p1 = p2;
@@ -236,10 +246,14 @@ void changeDirectory(int chdirIndex){
         strcpy(oldPath, currentPath);
 }
 
+void exitFunc(){
+    exit(0);
+}
+
 int main() {
     char userInput[100];
-    int commandIndex = 0;
     memset(oldPath, NULL, 100);
+    int commandIndex = 0;
 
     while(1){
         // Display Prompt
@@ -249,12 +263,15 @@ int main() {
         // Scan a command
         scanf(" %[^\n]", userInput);
 
+        if(strcmp("exit", userInput) == 0)
+            break;
+
         // Initialize the first command info in the commandsInfo array
         commandInfoInit(&commandsInfo[commandIndex], userInput);
 
         int status;
         pid_t pid;
-        int execStatus;
+        execStatus = 0;
         pid_t waitResult;
 
         // jobs command
@@ -292,8 +309,11 @@ int main() {
         else if (pid == 0) {
             execStatus = execvp(commandsInfo[commandIndex].argv[0], commandsInfo[commandIndex].argv);
 
-            if (execStatus == -1)
+            if (execStatus == -1){
                 printf("exec failed\n");
+                break;
+            }
+
         }
 
         // Father
@@ -301,9 +321,14 @@ int main() {
             // Foreground
             if (commandsInfo[commandIndex].isBackground == 0){
                 waitResult = waitpid(commandsInfo[commandIndex].pid, NULL, 0);
+
+                if(waitResult == -1)
+                    printf("An error occurred\n");
             }
         }
 
         commandIndex++;
     }
+
+    exitFunc();
 }
